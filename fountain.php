@@ -22,10 +22,10 @@ function transformType($matches) {
 
     // Punctuation
     // TODO: Option to enforce smart punctuation, typewriter style or neither
-    $pattern[] = '/\.{3}|…/';
-    $replace[] = '…';
-    $pattern[] = '/(\s+-\s+|[ \t]*\-{2,3}[ \t]*|[ \t]*—[ \t]*|[ \t]*–[ \t]*)/';
-    $replace[] = '—';
+    // $pattern[] = '/\.{3}|…/';
+    // $replace[] = '…';
+    // $pattern[] = '/(\s+-\s+|[ \t]*\-{2,3}[ \t]*|[ \t]*—[ \t]*|[ \t]*–[ \t]*)/';
+    // $replace[] = '—';
 
     // Emphasis
     // TODO: can this be smarter about badly nested tags?
@@ -38,6 +38,17 @@ function transformType($matches) {
     $pattern[] = '/(_|\[u\])([^\n]*?)(_|\[\/u\])/';
     $replace[] = '<u>\2</u>';
 
+    // TODO: Inline comments
+    // $pattern[] = '/([^\n]\[{2})(.+?)(\]{2})/';
+    // $replace[] = '<span class="note">$2</span>';
+
+    // Inline additions and deletions (a non-standard Fountain extension)
+    // TODO: Make this optional.
+    $pattern[] = '/(\+{2})(.+?)(\+{2})/';
+    $replace[] = '<span class="added">$2</span>';
+    $pattern[] = '/(\\\{2})(.+?)(\\\{2})/';
+    $replace[] = '<span class="deleted">$2</span>';
+
     $output = preg_replace($pattern, $replace, $matches);
 
     return $output;
@@ -48,6 +59,7 @@ function fountainParse($text) {
     //  Rules contain conditions (keys starting with 'cond').
     //  The first rule where all conditions are met determines how a given line is handled.
     //
+    //  condIs: is a given string
     //  condStartsWith: starts with a given string
     //  condEndsWith: ends with a given string
     //  condFirst: first line in its block, i.e. follows a blank line
@@ -63,7 +75,7 @@ function fountainParse($text) {
     //  begin: declares the surrounding block a given type; used for condIn checks
     //      (currently just 'speech' for dialogue)
     //  blockClass: the surrounding block is given this class
-    //  retro: retroactively wrap this and the preceding block with a given class
+    //  wrapPrevious: wrap this and the preceding block with a given class
     //      (used for dual dialogue)
 
     $Rules = [];
@@ -91,9 +103,38 @@ function fountainParse($text) {
         'condStartsWith' => '>',
         'lineClass' => 'transition',
     ];
+    $Rules[] = [
+        'condStartsWith' => '[[',
+        'condEndsWith' => ']]',
+        'lineClass' => 'note',
+    ];
+    $Rules[] = [
+        'condStartsWith' => '=',
+        'lineClass' => 'synopsis',
+        'blockClass' => 'synopsis',
+    ];
 
+    //  Deleted blocks (a non-standard Fountain extension)
+    //  TODO: Make this optional
 
+    $Rules[] = [
+        'condIs' => '\\\\',
+        'makeWrap' => 'deleted',
+    ];
 
+    //  Multiline notes
+    //  TODO: Make this smarter -- currently it only detects [[ or ]] on their own line
+
+    $Rules[] = [
+        'condIs' => '[[',
+        'makeWrap' => 'note-block',
+        'overrideClass' => '',
+    ];
+    $Rules[] = [
+        'condIs' => ']]',
+        'makeWrap' => 'note-block',
+        'overrideClass' => '',
+    ];
 
     //  In-character dialogue blocks (a non-standard Fountain extension)
     //  TODO: Make this optional
@@ -107,7 +148,7 @@ function fountainParse($text) {
         'lineClass' => 'character role',
         'begin' => 'speech',
         'blockClass' => 'speech-ic',
-        'retro' => 'dual',
+        'wrapPrevious' => 'dual',
     ];
     $Rules[] = [
         'condStartsWith' => '%',
@@ -125,7 +166,7 @@ function fountainParse($text) {
         'lineClass' => 'character role',
         'begin' => 'speech',
         'blockClass' => 'speech-ic',
-        'retro' => 'dual',
+        'wrapPrevious' => 'dual',
     ];
     $Rules[] = [
         'condPattern' => '/^@[\w\s\'\.-]+\s\(AS\s[\w\s\'\.-]+\)/',
@@ -144,7 +185,7 @@ function fountainParse($text) {
         'lineClass' => 'character role',
         'begin' => 'speech',
         'blockClass' => 'speech-ic',
-        'retro' => 'dual',
+        'wrapPrevious' => 'dual',
     ];
     $Rules[] = [
         'condPattern' => '/^[\w\s\'\.-]+\s\(AS\s[\w\s\'\.-]+\)/',
@@ -195,7 +236,7 @@ function fountainParse($text) {
         'lineClass' => 'character dual-character',
         'makeClass' => true,
         'begin' => 'speech',
-        'retro' => 'dual',
+        'wrapPrevious' => 'dual',
     ];
     $Rules[] = [
         'condStartsWith' => '@',
@@ -212,7 +253,7 @@ function fountainParse($text) {
         'element' => 'h3',
         'lineClass' => 'character',
         'begin' => 'speech',
-        'retro' => 'dual',
+        'wrapPrevious' => 'dual',
     ];
     $Rules[] = [
         'condFirst' => true,
@@ -269,6 +310,8 @@ function fountainParse($text) {
 
     //  Second pass: determine semantic elements/classes for blocks and lines
 
+    $overrideClass = null;
+
     foreach ($blocks as $i => &$block) {
         foreach ($block['lines'] as $j => &$line) {
             foreach ($Rules as $rule) {
@@ -277,6 +320,9 @@ function fountainParse($text) {
 
                 if ($rule['condAlone'])
                     $match = (count($block) === 1);
+                
+                if ($rule['condIs'])
+                    $match = ($l === $rule['condIs']);
                 
                 if ($match && $rule['condFirst']) 
                     $match = ($j === 0);
@@ -300,7 +346,7 @@ function fountainParse($text) {
                 
                 if ($match) {
                     $line['element'] = $rule['element'] ? $rule['element'] : 'p';
-                    $line['lineClass'] = $rule['lineClass'];
+                    $line['lineClass'] = $overrideClass ? $overrideClass : $rule['lineClass'];
 
                     // If we're starting, for example, a dialogue block, remember that
                     $begin = $rule['begin'];
@@ -321,13 +367,29 @@ function fountainParse($text) {
                         $line['text'] = substr($line['text'], 0, -strlen($c));
                     }
 
-                    $retro = $rule['retro'];
-                    if ($retro) {
-                        if ($i) {
-                            $blocks[$i-1]['beginWrap'] = $retro;
-                            $block['endWrap'] = $retro;
+                    $makeWrap = $rule['makeWrap'];
+                    if ($makeWrap) {
+                        if ($wrapping[$makeWrap]) {
+                            $block['endWrap'] = $makeWrap;
+                            $line['text'] = '';
+                            $wrapping[$makeWrap] = null;
+                            $overrideClass = null;
+                        } else {
+                            $block['beginWrap'] = $makeWrap;
+                            $line['text'] = '';
+                            $wrapping[$makeWrap] = true;
+                            //  TODO: This ain't being set
+                            $overrideClass = $rule['overrideClass'];
                         }
                     }
+                    $wrapPrevious = $rule['wrapPrevious'];
+                    if ($wrapPrevious) {
+                        if ($i) {
+                            $blocks[$i-1]['beginWrap'] = $wrapPrevious;
+                            $block['endWrap'] = $wrapPrevious;
+                        }
+                    }
+
                     break;
                 }
             }
@@ -348,9 +410,11 @@ function fountainParse($text) {
             $html .= '<div class="' . $block['blockClass'] . "\">\n";
 
         foreach ($block['lines'] as $line) {
-            $html .= '<' . $line['element'] . ' class="' . $line['lineClass'] .'">';
-            $html .= $line['text'];
-            $html .= '</' . $line['element'] . ">\n";
+            if ($line['text']) {
+                $html .= '<' . $line['element'] . ' class="' . $line['lineClass'] .'">';
+                $html .= $line['text'];
+                $html .= '</' . $line['element'] . ">\n";
+            }
         }
 
         if ($block['blockClass'])
