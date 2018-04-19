@@ -136,6 +136,20 @@ function fountainParse($text) {
         'overrideClass' => '',
     ];
 
+    //  Blockquotes (a non-standard Fountain extension)
+    //  TODO: Make this optional
+
+    $Rules[] = [
+        'condIs' => '{{',
+        'makeWrap' => 'quote-block',
+        'overrideClass' => '',
+    ];
+    $Rules[] = [
+        'condIs' => '}}',
+        'makeWrap' => 'quote-block',
+        'overrideClass' => '',
+    ];
+
     //  In-character dialogue blocks (a non-standard Fountain extension)
     //  TODO: Make this optional
 
