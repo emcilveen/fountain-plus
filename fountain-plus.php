@@ -18,6 +18,7 @@ if ( !function_exists( 'add_action' ) ) {
 	exit;
 }
 
+require('vars.php');
 require('fountain.php');
 
 if ( ! defined( 'WP_CONTENT_URL' ) )
@@ -38,15 +39,10 @@ if ( is_admin() ) { // admin actions
 }
 
 
-$default_options  = array(
-    'script_style' => 'Screenplay',
-    'use_additions' => 'true',
-    'use_deletions' => 'true',
-);
-$script_style_options = array('Screenplay', 'Stage');
-
 
 function fountain_register_settings() {
+    global $default_options;
+
     $args = array(
         'sanitize_callback' => 'sanitize_fountain_options',
     );

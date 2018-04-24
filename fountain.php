@@ -10,7 +10,12 @@ and the WP-Fountain plugin by Nima Yousefi.
 ?>
 <?php
 
+require('vars.php');
+
 function transformType($matches) {
+    global $default_options;
+
+    $options = get_option('fountain_plus_options', $default_options);
 
     // Create arrays for styling replacements
     $pattern = [];
