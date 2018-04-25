@@ -50,6 +50,7 @@ function fountain_register_settings() {
     register_setting('fountain_plus_group', 'fountain_plus_options',  $args);
     add_settings_section('fountain_plus_main', 'Fountain Plus Settings', 'fountain_plus_settings_text', 'fountain_plus');
     add_settings_field('script_style', 'Script Style', 'fountain_plus_script_style', 'fountain_plus', 'fountain_plus_main');
+    add_settings_field('punctuation', 'Punctuation', 'fountain_plus_punctuation', 'fountain_plus', 'fountain_plus_main');
     add_settings_section('fountain_plus_features', 'Optional Features', 'fountain_plus_features_text', 'fountain_plus');
     add_settings_field('use_additions', 'Additions', 'fountain_plus_use_additions', 'fountain_plus', 'fountain_plus_features');
     add_settings_field('use_deletions', 'Deletions', 'fountain_plus_use_deletions', 'fountain_plus', 'fountain_plus_features');
@@ -76,6 +77,19 @@ function fountain_plus_script_style() {
     echo $html;
 }
 
+function fountain_plus_punctuation() {
+    global $punctuation_options, $default_options;
+    $options = get_option('fountain_plus_options', $default_options);
+
+    $html = '<select name="fountain_plus_options[punctuation]">';
+    foreach ($punctuation_options as $s) {
+        $selected = ($options['punctuation'] == $s) ? ' selected' : '';
+        $html .= "<option name=\"$s\" $selected>$s</option>";
+    }
+    $html .= "</select>\n";
+    echo $html;
+}
+
 function fountain_plus_use_additions() {
     global $default_options;
     $options = get_option('fountain_plus_options', $default_options);
@@ -94,17 +108,22 @@ function fountain_plus_use_deletions() {
     echo $html;
 }
 
+function sanitize_select($value, $options, $default) {
+    if (! $value && ! in_array($value, $options)) {
+        $sanitized_value = $default;
+    } else {
+        $sanitized_value = $value;
+    }
+    return $sanitized_value;
+}
 
 //  Validate and sanitize input
 function sanitize_fountain_options($input) {
-    global $default_options, $script_style_options;
     $sanitized_input = array();
 
-    if (! $input['script_style'] && ! in_array($input['script_style'], $script_style_options)) {
-        $sanitized_input['script_style'] = $default_options['script_style'];
-    } else {
-        $sanitized_input['script_style'] = $input['script_style'];
-    }
+    $sanitized_input['script_style'] = sanitize_select($input['script_style'], $script_style_options, $default_options['script_style']);
+    $sanitized_input['punctuation'] = sanitize_select($input['punctuation'], $punctuation_options, $default_options['punctuation']);
+
     $sanitized_input['use_additions'] = $input['use_additions'] ? '1' : '';
     $sanitized_input['use_deletions'] = $input['use_deletions'] ? '1' : '';
 

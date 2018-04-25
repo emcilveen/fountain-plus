@@ -14,7 +14,6 @@ require('vars.php');
 
 function transformType($matches) {
     global $default_options;
-
     $options = get_option('fountain_plus_options', $default_options);
 
     // Create arrays for styling replacements
@@ -25,12 +24,18 @@ function transformType($matches) {
     $pattern[] = '/\/\*.*?\*\//s';
     $replace[] = '';
 
-    // Punctuation
-    // TODO: Option to enforce smart punctuation, typewriter style or neither
-    // $pattern[] = '/\.{3}|…/';
-    // $replace[] = '…';
-    // $pattern[] = '/(\s+-\s+|[ \t]*\-{2,3}[ \t]*|[ \t]*—[ \t]*|[ \t]*–[ \t]*)/';
-    // $replace[] = '—';
+    // Enforce typewriter style, smart punctuation or neither
+    if ($options['punctuation'] == 'Typewriter') {
+        $pattern[] = '/\…/';
+        $replace[] = '...';
+        $pattern[] = '/(–|—|&[mn]dash;)/';
+        $replace[] = '--';
+    } else if ($options['punctuation'] == 'Smart') {
+        $pattern[] = '/\.{3}|…/';
+        $replace[] = '…';
+        $pattern[] = '/(\s+-\s+|[ \t]*\-{2,3}[ \t]*|[ \t]*—[ \t]*|[ \t]*–[ \t]*)/';
+        $replace[] = '—';
+    }
 
     // Emphasis
     // TODO: can this be smarter about badly nested tags?
@@ -48,11 +53,14 @@ function transformType($matches) {
     // $replace[] = '<span class="note">$2</span>';
 
     // Inline additions and deletions (a non-standard Fountain extension)
-    // TODO: Make this optional.
-    $pattern[] = '/(\+{2})(.+?)(\+{2})/';
-    $replace[] = '<span class="added">$2</span>';
-    $pattern[] = '/(\\\{2})(.+?)(\\\{2})/';
-    $replace[] = '<span class="deleted">$2</span>';
+    if ($options['use_additions'] == 1) {
+        $pattern[] = '/(\+{2})(.+?)(\+{2})/';
+        $replace[] = '<span class="added">$2</span>';
+    }
+    if ($options['use_deletions'] == 1) {
+        $pattern[] = '/(\\\{2})(.+?)(\\\{2})/';
+        $replace[] = '<span class="deleted">$2</span>';
+    }
 
     $output = preg_replace($pattern, $replace, $matches);
 
@@ -60,6 +68,8 @@ function transformType($matches) {
 }
 
 function fountainParse($text) {
+    global $default_options;
+    $options = get_option('fountain_plus_options', $default_options);
 
     //  Rules contain conditions (keys starting with 'cond').
     //  The first rule where all conditions are met determines how a given line is handled.
@@ -119,13 +129,20 @@ function fountainParse($text) {
         'blockClass' => 'synopsis',
     ];
 
-    //  Deleted blocks (a non-standard Fountain extension)
-    //  TODO: Make this optional
+    //  Added and deleted blocks (a non-standard Fountain extension)
 
-    $Rules[] = [
-        'condIs' => '\\\\',
-        'makeWrap' => 'deleted',
-    ];
+    if ($options['use_additions'] == 1) {
+        $Rules[] = [
+            'condIs' => '++',
+            'makeWrap' => 'added',
+        ];
+    }
+    if ($options['use_deletions'] == 1) {
+        $Rules[] = [
+            'condIs' => '\\\\',
+            'makeWrap' => 'deleted',
+        ];
+    }
 
     //  Multiline notes
     //  TODO: Make this smarter -- currently it only detects [[ or ]] on their own line
