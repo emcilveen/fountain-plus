@@ -10,32 +10,25 @@ and the WP-Fountain plugin by Nima Yousefi.
 ?>
 <?php
 
-require('vars.php');
-
 function transformType($matches) {
-    global $default_options;
-    $options = get_option('fountain_plus_options', $default_options);
 
     // Create arrays for styling replacements
     $pattern = [];
     $replace = [];
 
+    // Used to tell if we're within a makeWrap block (e.g. deleted, note-block)
+    $wrapping = [];
+
     // Boneyard (deleted material); /s searches across lines
     $pattern[] = '/\/\*.*?\*\//s';
     $replace[] = '';
 
-    // Enforce typewriter style, smart punctuation or neither
-    if ($options['punctuation'] == 'Typewriter') {
-        $pattern[] = '/\…/';
-        $replace[] = '...';
-        $pattern[] = '/(–|—|&[mn]dash;)/';
-        $replace[] = '--';
-    } else if ($options['punctuation'] == 'Smart') {
-        $pattern[] = '/\.{3}|…/';
-        $replace[] = '…';
-        $pattern[] = '/(\s+-\s+|[ \t]*\-{2,3}[ \t]*|[ \t]*—[ \t]*|[ \t]*–[ \t]*)/';
-        $replace[] = '—';
-    }
+    // Punctuation
+    // TODO: Option to enforce smart punctuation, typewriter style or neither
+    $pattern[] = '/\.{3}|…/';
+    $replace[] = '…';
+    $pattern[] = '/(\s+-\s+|[ \t]*\-{2,3}[ \t]*|[ \t]*—[ \t]*|[ \t]*–[ \t]*)/';
+    $replace[] = '—';
 
     // Emphasis
     // TODO: can this be smarter about badly nested tags?
@@ -53,14 +46,11 @@ function transformType($matches) {
     // $replace[] = '<span class="note">$2</span>';
 
     // Inline additions and deletions (a non-standard Fountain extension)
-    if ($options['use_additions'] == 1) {
-        $pattern[] = '/(\+{2})(.+?)(\+{2})/';
-        $replace[] = '<span class="added">$2</span>';
-    }
-    if ($options['use_deletions'] == 1) {
-        $pattern[] = '/(\\\{2})(.+?)(\\\{2})/';
-        $replace[] = '<span class="deleted">$2</span>';
-    }
+    // TODO: Make this optional.
+    $pattern[] = '/(\+{2})(.+?)(\+{2})/';
+    $replace[] = '<span class="added">$2</span>';
+    $pattern[] = '/(\\\{2})(.+?)(\\\{2})/';
+    $replace[] = '<span class="deleted">$2</span>';
 
     $output = preg_replace($pattern, $replace, $matches);
 
@@ -68,8 +58,6 @@ function transformType($matches) {
 }
 
 function fountainParse($text) {
-    global $default_options;
-    $options = get_option('fountain_plus_options', $default_options);
 
     //  Rules contain conditions (keys starting with 'cond').
     //  The first rule where all conditions are met determines how a given line is handled.
@@ -129,20 +117,13 @@ function fountainParse($text) {
         'blockClass' => 'synopsis',
     ];
 
-    //  Added and deleted blocks (a non-standard Fountain extension)
+    //  Deleted blocks (a non-standard Fountain extension)
+    //  TODO: Make this optional
 
-    if ($options['use_additions'] == 1) {
-        $Rules[] = [
-            'condIs' => '++',
-            'makeWrap' => 'added',
-        ];
-    }
-    if ($options['use_deletions'] == 1) {
-        $Rules[] = [
-            'condIs' => '\\\\',
-            'makeWrap' => 'deleted',
-        ];
-    }
+    $Rules[] = [
+        'condIs' => '\\\\',
+        'makeWrap' => 'deleted',
+    ];
 
     //  Multiline notes
     //  TODO: Make this smarter -- currently it only detects [[ or ]] on their own line
@@ -197,7 +178,7 @@ function fountainParse($text) {
     //  Forced character name; IC inferred from '@AnACTOR (AS CHARACTER NAME)'
 
     $Rules[] = [
-        'condPattern' => '/^@[\w\s\'\.-]+\s\(AS\s[\w\s\'\.-]+\)\s*\^$/',
+        'condPattern' => '/^@[\w\s\'\.-]+\s\(AS\s[\w\s#\'\.-]+\)\s*\^$/',
         'element' => 'h3',
         'lineClass' => 'character role',
         'begin' => 'speech',
@@ -205,7 +186,7 @@ function fountainParse($text) {
         'wrapPrevious' => 'dual',
     ];
     $Rules[] = [
-        'condPattern' => '/^@[\w\s\'\.-]+\s\(AS\s[\w\s\'\.-]+\)/',
+        'condPattern' => '/^@[\w\s\'\.-]+\s\(AS\s[\w\s#\'\.-]+\)/',
         'element' => 'h3',
         'lineClass' => 'character role',
         'begin' => 'speech',
@@ -215,7 +196,7 @@ function fountainParse($text) {
     //  Inferred character name, inferred in-character
 
     $Rules[] = [
-        'condPattern' => '/^[\w\s\'\.-]+\s\(AS\s[\w\s\'\.-]+\)\s*\^$/',
+        'condPattern' => '/^[\w\s\'\.-]+\s\(AS\s[\w\s#\'\.-]+\)\s*\^$/',
         'condUppercase' => true,
         'element' => 'h3',
         'lineClass' => 'character role',
@@ -224,7 +205,7 @@ function fountainParse($text) {
         'wrapPrevious' => 'dual',
     ];
     $Rules[] = [
-        'condPattern' => '/^[\w\s\'\.-]+\s\(AS\s[\w\s\'\.-]+\)/',
+        'condPattern' => '/^[\w\s\'\.-]+\s\(AS\s[\w\s#\'\.-]+\)/',
         'condUppercase' => true,
         'element' => 'h3',
         'lineClass' => 'character role',
@@ -354,58 +335,60 @@ function fountainParse($text) {
                 $match = true;
                 $l = $line['text'];
 
-                if ($rule['condAlone'])
+                if (isset($rule['condAlone']) ? $rule['condAlone'] : null)
                     $match = (count($block) === 1);
                 
-                if ($rule['condIs'])
+                if (isset($rule['condIs']) ? $rule['condIs'] : null)
                     $match = ($l === $rule['condIs']);
                 
-                if ($match && $rule['condFirst']) 
+                if ($match && (isset($rule['condFirst']) ? $rule['condFirst'] : null))
                     $match = ($j === 0);
 
-                $c = $rule['condStartsWith'];
+                $c = (isset($rule['condStartsWith']) ? $rule['condStartsWith'] : null);
                 if ($match && $c)
                     $match = (substr($l, 0, strlen($c)) === $c);
                 
-                $c = $rule['condEndsWith'];
+                $c = (isset($rule['condEndsWith']) ? $rule['condEndsWith'] : null);
                 if ($match && $c)
                     $match = (substr($l, -strlen($c)) === $c);
 
-                if ($match && $rule['condPattern'])
+                if ($match && (isset($rule['condPattern']) ? $rule['condPattern'] : null))
                     $match = preg_match($rule['condPattern'], $l);
 
-                if ($match && $rule['condUppercase'])
+                if ($match && (isset($rule['condUppercase']) ? $rule['condUppercase'] : null))
                     $match = preg_match('/^[A-Z\s\(\),\.\'-\^]+$/', $l);
 
-                if ($match && $rule['condIn'])
-                    $match = $isIn[$rule['condIn']];
+                if ($match && (isset($rule['condIn']) ? $rule['condIn'] : null)) {
+                    $cKey= $rule['condIn'];
+                    $match = isset($isIn[$cKey]) ? $isIn[$cKey] : null;
+                }
                 
                 if ($match) {
-                    $line['element'] = $rule['element'] ? $rule['element'] : 'p';
-                    $line['lineClass'] = $overrideClass ? $overrideClass : $rule['lineClass'];
+                    $line['element'] = ((isset($rule['element']) ? $rule['element'] : null)) ? $rule['element'] : 'p';
+                    $line['lineClass'] = $overrideClass ? $overrideClass : (isset($rule['lineClass']) ? $rule['lineClass'] : null);
 
                     // If we're starting, for example, a dialogue block, remember that
-                    $begin = $rule['begin'];
+                    $begin = (isset($rule['begin']) ? $rule['begin'] : null);
                     if ($begin) {
                         $isIn[$begin] = true;
                         $block['blockClass'] = $begin;
-                        if ($rule['blockClass'])
+                        if (isset($rule['blockClass']) ? $rule['blockClass'] : null)
                             $block['blockClass'] .= ' ' . $rule['blockClass'];
                     }
 
                     // Strip forcing markers at start and end of line
-                    $c = $rule['condStartsWith'];
-                    if ($c && !$rule['keepMarkers'])
+                    $c = (isset($rule['condStartsWith']) ? $rule['condStartsWith'] : null);
+                    if ($c && !((isset($rule['keepMarkers']) ? $rule['keepMarkers'] : null)))
                         $line['text'] = substr($line['text'], strlen($c));
                     
-                    $c = $rule['condEndsWith'];
-                    if ($c && !$rule['keepMarkers']) {
+                    $c = (isset($rule['condEndsWith']) ? $rule['condEndsWith'] : null);
+                    if ($c && !((isset($rule['keepMarkers']) ? $rule['keepMarkers'] : null))) {
                         $line['text'] = substr($line['text'], 0, -strlen($c));
                     }
 
-                    $makeWrap = $rule['makeWrap'];
+                    $makeWrap = (isset($rule['makeWrap']) ? $rule['makeWrap'] : null);
                     if ($makeWrap) {
-                        if ($wrapping[$makeWrap]) {
+                        if (isset($wrapping[$makeWrap] ? $wrapping[$makeWrap] : null) {
                             $block['endWrap'] = $makeWrap;
                             $line['text'] = '';
                             $wrapping[$makeWrap] = null;
@@ -414,11 +397,11 @@ function fountainParse($text) {
                             $block['beginWrap'] = $makeWrap;
                             $line['text'] = '';
                             $wrapping[$makeWrap] = true;
-                            //  TODO: This ain't being set
-                            $overrideClass = $rule['overrideClass'];
+                            // 
+                            $overrideClass = (isset($rule['overrideClass']) ? $rule['overrideClass'] : null);
                         }
                     }
-                    $wrapPrevious = $rule['wrapPrevious'];
+                    $wrapPrevious = (isset($rule['wrapPrevious']) ? $rule['wrapPrevious'] : null);
                     if ($wrapPrevious) {
                         if ($i) {
                             $blocks[$i-1]['beginWrap'] = $wrapPrevious;
@@ -440,22 +423,24 @@ function fountainParse($text) {
     $html = '';
 
     foreach ($blocks as $i => $block) {
-        if ($block['beginWrap'])
+        if (isset($block['beginWrap']) ? $block['beginWrap'] : null)
             $html .= '<div class="' . $block['beginWrap'] . "\">\n";
-        if ($block['blockClass'])
+        if (isset($block['blockClass']) ? $block['blockClass'] : null)
             $html .= '<div class="' . $block['blockClass'] . "\">\n";
 
-        foreach ($block['lines'] as $line) {
-            if ($line['text']) {
-                $html .= '<' . $line['element'] . ' class="' . $line['lineClass'] .'">';
-                $html .= $line['text'];
-                $html .= '</' . $line['element'] . ">\n";
+        if (isset($block['lines']) ? $block['lines'] : null) {
+            foreach ($block['lines'] as $line) {
+                if (isset($line['text']) ? $line['text'] : null) {
+                    $html .= '<' . $line['element'] . ' class="' . $line['lineClass'] .'">';
+                    $html .= $line['text'];
+                    $html .= '</' . $line['element'] . ">\n";
+                }
             }
         }
 
-        if ($block['blockClass'])
+        if (isset($block['blockClass']) ? $block['blockClass'] : null)
             $html .= "</div>\n";
-        if ($block['endWrap'])
+        if (isset($block['endWrap']) ? $block['endWrap'] : null)
             $html .= "</div>\n";
     }
 

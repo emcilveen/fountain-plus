@@ -18,7 +18,7 @@ if ( !function_exists( 'add_action' ) ) {
 	exit;
 }
 
-require('vars.php');
+// require('vars.php');
 require('fountain.php');
 
 if ( ! defined( 'WP_CONTENT_URL' ) )
@@ -83,7 +83,7 @@ function fountain_plus_punctuation() {
 
     $html = '<select name="fountain_plus_options[punctuation]">';
     foreach ($punctuation_options as $s) {
-        $selected = ($options['punctuation'] == $s) ? ' selected' : '';
+        $selected = ((isset($options['punctuation']) ? $options['punctuation'] : null) == $s) ? ' selected' : '';
         $html .= "<option name=\"$s\" $selected>$s</option>";
     }
     $html .= "</select>\n";
@@ -94,7 +94,7 @@ function fountain_plus_use_additions() {
     global $default_options;
     $options = get_option('fountain_plus_options', $default_options);
 
-    $html = '<input type="checkbox" id="fountain_plus_use_additions" name="fountain_plus_options[use_additions]" value="1"' . checked( 1, $options['use_additions'], false ) . '/>';
+    $html = '<input type="checkbox" id="fountain_plus_use_additions" name="fountain_plus_options[use_additions]" value="1"' . checked( 1, isset($options['use_additions']) ? $options['use_additions'] : null, false ) . '/>';
     $html .= ' <label for="fountain_plus_use_additions">Additions</label>';
     echo $html;
 }
@@ -103,7 +103,7 @@ function fountain_plus_use_deletions() {
     global $default_options;
     $options = get_option('fountain_plus_options', $default_options);
 
-    $html = '<input type="checkbox" id="fountain_plus_use_deletions" name="fountain_plus_options[use_deletions]" value="1"' . checked( 1, $options['use_deletions'], false ) . '/>';
+    $html = '<input type="checkbox" id="fountain_plus_use_deletions" name="fountain_plus_options[use_deletions]" value="1"' . checked( 1, isset($options['use_deletions']) ? $options['use_deletions'] : null, false ) . '/>';
     $html .= ' <label for="fountain_plus_use_deletions">Deletions</label>';
     echo $html;
 }
@@ -121,11 +121,19 @@ function sanitize_select($value, $options, $default) {
 function sanitize_fountain_options($input) {
     $sanitized_input = array();
 
-    $sanitized_input['script_style'] = sanitize_select($input['script_style'], $script_style_options, $default_options['script_style']);
-    $sanitized_input['punctuation'] = sanitize_select($input['punctuation'], $punctuation_options, $default_options['punctuation']);
+    $sanitized_input['script_style'] = sanitize_select(
+        isset($input['script_style']) ? $input['script_style'] : null,
+        $script_style_options,
+        isset($default_options['script_style']) ? $default_options['script_style'] : null
+    );
+    $sanitized_input['punctuation'] = sanitize_select(
+        isset($input['punctuation']) ? $input['punctuation'] : null,
+        $punctuation_options,
+        isset($default_options['punctuation']) ? $default_options['punctuation'] : null
+    );
 
-    $sanitized_input['use_additions'] = $input['use_additions'] ? '1' : '';
-    $sanitized_input['use_deletions'] = $input['use_deletions'] ? '1' : '';
+    $sanitized_input['use_additions'] = (isset($input['use_additions']) ? $input['use_additions'] : null) ? '1' : '';
+    $sanitized_input['use_deletions'] = (isset($input['use_deletions']) ? $input['use_deletions'] : null) ? '1' : '';
 
     return $sanitized_input;
 }
@@ -166,12 +174,12 @@ function fountain_plus_save_options() {
     var_dump($_POST);
     // Get all the options from the $_POST
     foreach ($fountain_plus_options as $key => $value) {
-        $fountain_plus_options[$key] = $_POST[$key];
+        $fountain_plus_options[$key] = isset($_POST[$key]) ? $_POST[$key] : null;
     }
 
     update_option('fountain_plus_options', $fountain_plus_options);
 }
 
-if ($_POST['action'] == 'save_options'){
+if ((isset($_POST['action']) ? $_POST['action'] : null) == 'save_options'){
     fountain_plus_save_options();
 }
