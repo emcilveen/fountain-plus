@@ -10,7 +10,11 @@ and the WP-Fountain plugin by Nima Yousefi.
 ?>
 <?php
 
+require('vars.php');
+
 function transformType($matches) {
+    global $default_options;
+    $options = get_option('fountain_plus_options', $default_options);
 
     // Create arrays for styling replacements
     $pattern = [];
@@ -23,12 +27,18 @@ function transformType($matches) {
     $pattern[] = '/\/\*.*?\*\//s';
     $replace[] = '';
 
-    // Punctuation
-    // TODO: Option to enforce smart punctuation, typewriter style or neither
-    $pattern[] = '/\.{3}|…/';
-    $replace[] = '…';
-    $pattern[] = '/(\s+-\s+|[ \t]*\-{2,3}[ \t]*|[ \t]*—[ \t]*|[ \t]*–[ \t]*)/';
-    $replace[] = '—';
+    // Enforce typewriter style, smart punctuation or neither
+    if ((isset($options['punctuation']) ? $options['punctuation'] : null) == 'Typewriter') {
+        $pattern[] = '/\…/';
+        $replace[] = '...';
+        $pattern[] = '/(–|—|&[mn]dash;)/';
+        $replace[] = '--';
+    } else if ((isset($options['punctuation']) ? $options['punctuation'] : null) == 'Smart') {
+        $pattern[] = '/\.{3}|…/';
+        $replace[] = '…';
+        $pattern[] = '/(\s+-\s+|[ \t]*\-{2,3}[ \t]*|[ \t]*—[ \t]*|[ \t]*–[ \t]*)/';
+        $replace[] = '—';
+    }
 
     // Emphasis
     // TODO: can this be smarter about badly nested tags?
@@ -46,11 +56,14 @@ function transformType($matches) {
     // $replace[] = '<span class="note">$2</span>';
 
     // Inline additions and deletions (a non-standard Fountain extension)
-    // TODO: Make this optional.
-    $pattern[] = '/(\+{2})(.+?)(\+{2})/';
-    $replace[] = '<span class="added">$2</span>';
-    $pattern[] = '/(\\\{2})(.+?)(\\\{2})/';
-    $replace[] = '<span class="deleted">$2</span>';
+    if ((isset($options['use_additions']) ? $options['use_additions'] : null) == 1) {
+        $pattern[] = '/(\+{2})(.+?)(\+{2})/';
+        $replace[] = '<span class="added">$2</span>';
+    }
+    if ((isset($options['use_deletions']) ? $options['use_deletions'] : null) == 1) {
+        $pattern[] = '/(\\\{2})(.+?)(\\\{2})/';
+        $replace[] = '<span class="deleted">$2</span>';
+    }
 
     $output = preg_replace($pattern, $replace, $matches);
 
@@ -58,6 +71,8 @@ function transformType($matches) {
 }
 
 function fountainParse($text) {
+    global $default_options;
+    $options = get_option('fountain_plus_options', $default_options);
 
     //  Rules contain conditions (keys starting with 'cond').
     //  The first rule where all conditions are met determines how a given line is handled.
@@ -117,13 +132,20 @@ function fountainParse($text) {
         'blockClass' => 'synopsis',
     ];
 
-    //  Deleted blocks (a non-standard Fountain extension)
-    //  TODO: Make this optional
+    //  Added and deleted blocks (a non-standard Fountain extension)
 
-    $Rules[] = [
-        'condIs' => '\\\\',
-        'makeWrap' => 'deleted',
-    ];
+    if ((isset($options['use_additions']) ? $options['use_additions'] : null) == 1) {
+        $Rules[] = [
+            'condIs' => '++',
+            'makeWrap' => 'added',
+        ];
+    }
+    if ((isset($options['use_deletions']) ? $options['use_deletions'] : null) == 1) {
+        $Rules[] = [
+            'condIs' => '\\\\',
+            'makeWrap' => 'deleted',
+        ];
+    }
 
     //  Multiline notes
     //  TODO: Make this smarter -- currently it only detects [[ or ]] on their own line
@@ -364,8 +386,10 @@ function fountainParse($text) {
                 }
                 
                 if ($match) {
-                    $line['element'] = ((isset($rule['element']) ? $rule['element'] : null)) ? $rule['element'] : 'p';
-                    $line['lineClass'] = $overrideClass ? $overrideClass : (isset($rule['lineClass']) ? $rule['lineClass'] : null);
+                    $line['element'] =
+                        ((isset($rule['element']) ? $rule['element'] : null)) ? $rule['element'] : 'p';
+                    $line['lineClass'] = $overrideClass ? $overrideClass :
+                        (isset($rule['lineClass']) ? $rule['lineClass'] : null);
 
                     // If we're starting, for example, a dialogue block, remember that
                     $begin = (isset($rule['begin']) ? $rule['begin'] : null);
@@ -388,7 +412,7 @@ function fountainParse($text) {
 
                     $makeWrap = (isset($rule['makeWrap']) ? $rule['makeWrap'] : null);
                     if ($makeWrap) {
-                        if (isset($wrapping[$makeWrap] ? $wrapping[$makeWrap] : null) {
+                        if (isset($wrapping[$makeWrap]) ? $wrapping[$makeWrap] : null) {
                             $block['endWrap'] = $makeWrap;
                             $line['text'] = '';
                             $wrapping[$makeWrap] = null;
@@ -397,7 +421,7 @@ function fountainParse($text) {
                             $block['beginWrap'] = $makeWrap;
                             $line['text'] = '';
                             $wrapping[$makeWrap] = true;
-                            // 
+                            //  TODO: This ain't being set
                             $overrideClass = (isset($rule['overrideClass']) ? $rule['overrideClass'] : null);
                         }
                     }
